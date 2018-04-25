@@ -46,6 +46,9 @@
                  </v-avatar>
                  Voted
                </v-chip>
+               <v-btn v-if="option.user == user._id" color="secondary" @click="archive(option)">
+                 Archive
+               </v-btn>
              </v-layout>
             </v-card-title>
          </v-card>
@@ -123,6 +126,11 @@ export default {
     this.listen();
   },
   methods: {
+    async archive(option) {
+      await this.$services.questionOptions.patch(option._id, {
+        archived: true
+      });
+    },
     formatDate(date) {
       return timeago().format(date);
     },
@@ -193,7 +201,14 @@ export default {
         this.question = questions.data[0] || {};
         if (this.question._id) {
           const options = await this.$services.questionOptions.find({
-            question: this.question._id
+            query: {
+              question: this.question._id,
+              $or: [{
+                archived: null
+              }, {
+                archived: false
+              }]
+            }
           });
           this.options = options.data;
           const option_ids = [];
@@ -207,15 +222,17 @@ export default {
 
           const { 0: votes, 1: users } = await Promise.all([
             this.$services.optionVotes.find({
-              _id: {
-                $in: option_ids
+              query: {
+                _id: {
+                  $in: option_ids
+                }
               }
             }),
             this.$services.users.find({
-              _id: {
-                $in: user_ids
-              },
               query: {
+                _id: {
+                  $in: user_ids
+                },
                 $select: ['display_name', 'image']
               }
             })
