@@ -13,10 +13,11 @@
        </v-flex>
        <v-flex xs12>
          <v-text-field
-           label="Filter"
+           class="search"
+           label="Enter a search term"
            v-model="search"></v-text-field>
        </v-flex>
-       <v-flex xs12 v-for="(option, index) in filteredOptions" :key="option._id">
+       <v-flex xs12 v-for="(option, index) in filteredOptions" :key="option._id" v-if="!option.archived">
          <v-card :color="index % 2 == 0 ? 'cyan darken-2' : 'purple'" class="white--text">
            <v-card-title primary-title>
              <v-layout row wrap>
@@ -112,13 +113,33 @@ export default {
     };
   },
   computed: {
+    optionsById() {
+      return this.options.reduce((byId, option) => {
+        byId[option._id] = option;
+        return byId;
+      }, {});
+    },
+    orderedOptions() {
+      return Object.keys(this.votesByOption).map((option_id) => {
+        return {
+          votes: this.votesByOption[option_id].length,
+          ...this.optionsById[option_id],
+        };
+      }).sort((optionA, optionB) => {
+        const diff = optionB.votes - optionA.votes;
+        if (diff == 0) {
+          return +new Date(optionA.createdAt) - +new Date(optionB.createdAt);
+        }
+        return diff;
+      });
+    },
     filteredOptions() {
       if (this.search.trim()) {
         const regexp = new RegExp(this.search, 'gi');
-        return this.options.filter(option => option.text.match(regexp));
+        return this.orderedOptions.filter(option => option.text.match(regexp));
       }
 
-      return this.options;
+      return this.orderedOptions;
     }
   },
   mounted() {
@@ -130,6 +151,7 @@ export default {
       await this.$services.questionOptions.patch(option._id, {
         archived: true
       });
+      this.$set(option, 'archived', true);
     },
     formatDate(date) {
       return timeago().format(date);
@@ -176,8 +198,12 @@ export default {
           });
           this.users[option.user] = users.data[0];
         }
-        this.options.unshift(option);
+        this.options.push(option);
+        this.search = option.text;
         this.$set(this.votesByOption, option._id, []);
+        this.$nextTick(() => {
+          this.$refs.search.select();
+        });
       });
       this.$services.optionVotes.on('created', (vote) => {
         this.votesByOption[vote.option].push(vote);
@@ -223,7 +249,7 @@ export default {
           const { 0: votes, 1: users } = await Promise.all([
             this.$services.optionVotes.find({
               query: {
-                _id: {
+                option: {
                   $in: option_ids
                 }
               }
@@ -256,3 +282,10 @@ export default {
   }
 };
 </script>
+
+<style>
+.input-group--text-field input {
+  height: 60px;
+  font-size: 32px !important;
+}
+</style>
